@@ -1,0 +1,29 @@
+# 上传文件
+uploads/
+*.safetensors
+*.ckpt
+*.pt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 输出文件
+*.png
+*.jpg
+*.jpeg
+

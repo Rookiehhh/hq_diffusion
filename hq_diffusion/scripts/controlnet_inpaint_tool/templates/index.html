@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SD3 Inpainting 缺陷生成工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SD3 Inpainting 缺陷生成工具</h1>
+            <p class="subtitle">支持加载SD3模型、LoRA权重，在图片上绘制掩码进行缺陷生成</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab('load', this)">模型加载</button>
+            <button class="tab-button" onclick="switchTab('edit', this)">图像编辑</button>
+        </div>
+
+        <!-- 模型加载标签页 -->
+        <div id="load-tab" class="tab-content active">
+            <div class="section">
+                <h2>第一步：加载模型</h2>
+                
+                <div class="form-group">
+                    <label for="sd3_path">SD3模型路径 <span class="required">*</span></label>
+                    <input type="text" id="sd3_path" 
+                           placeholder="输入文件路径，例如: /root/autodl-tmp/model/sd3_medium.safetensors">
+                    <p class="help-text">或上传文件：</p>
+                    <input type="file" id="sd3_file" accept=".safetensors,.ckpt,.pt">
+                </div>
+
+                <div class="form-group">
+                    <label for="lora_path">LoRA权重路径 (可选)</label>
+                    <input type="text" id="lora_path" 
+                           placeholder="输入文件路径，例如: /root/autodl-tmp/lora/weights.safetensors">
+                    <p class="help-text">或上传文件：</p>
+                    <input type="file" id="lora_file" accept=".safetensors,.pt">
+                </div>
+
+
+                <button id="load-btn" class="btn btn-primary" onclick="loadModels()">加载模型</button>
+                <div id="load-status" class="status-message"></div>
+            </div>
+        </div>
+
+        <!-- 图像编辑标签页 -->
+        <div id="edit-tab" class="tab-content">
+            <div class="section">
+                <h2>第二步：上传图片并绘制掩码区域</h2>
+                
+                <div class="image-upload-section">
+                    <label for="image_upload">上传原始图片</label>
+                    <input type="file" id="image_upload" accept="image/*" onchange="handleImageUpload(event)">
+                    <div id="image-preview-container" class="hidden">
+                        <h3>绘制掩码区域</h3>
+                        <p class="help-text">
+                            使用下方工具栏在图片上绘制要生成缺陷的区域：<br>
+                            • 选择画笔工具，然后在图片上绘制（白色区域将作为掩码）<br>
+                            • 或选择矩形工具，拖拽绘制矩形区域
+                        </p>
+                        
+                        <div class="canvas-toolbar">
+                            <button id="brush-btn" class="tool-btn active" onclick="setTool('brush')">画笔</button>
+                            <button id="rect-btn" class="tool-btn" onclick="setTool('rect')">矩形</button>
+                            <button id="clear-btn" class="tool-btn" onclick="clearCanvas()">清除</button>
+                            <label for="brush-size">画笔大小:</label>
+                            <input type="range" id="brush-size" min="5" max="50" value="20" onchange="updateBrushSize()">
+                            <span id="brush-size-value">20</span>
+                        </div>
+                        
+                        <div class="canvas-container">
+                            <canvas id="original-canvas"></canvas>
+                            <canvas id="mask-canvas"></canvas>
+                            <canvas id="draw-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="params-section">
+                    <h2>第三步：设置生成参数</h2>
+                    
+                    <div class="form-group">
+                        <label for="prompt">提示词 (Prompt)</label>
+                        <textarea id="prompt" rows="2" placeholder="描述要生成的缺陷类型，例如: defect of crack, scratch, damage">defect of crack</textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="negative_prompt">负面提示词 (Negative Prompt)</label>
+                        <textarea id="negative_prompt" rows="2" placeholder="描述不希望出现的内容"></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="num_images">生成数量</label>
+                            <input type="number" id="num_images" min="1" max="8" value="4">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="num_inference_steps">推理步数</label>
+                            <input type="number" id="num_inference_steps" min="10" max="50" value="28">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="guidance_scale">引导强度 (Guidance Scale)</label>
+                            <input type="number" id="guidance_scale" min="1" max="20" step="0.5" value="7.0">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="padding_mask_crop">掩码裁剪填充 (可选)</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="number" id="padding_mask_crop" min="0" max="200" step="5" placeholder="例如: 50" style="flex: 1;">
+                                <button type="button" id="auto-padding-btn" class="btn btn-secondary" onclick="calculateAutoPadding()" style="white-space: nowrap;">自动计算</button>
+                            </div>
+                            <p class="help-text">在掩码周围添加填充像素，0表示不裁剪。点击"自动计算"会根据掩码外接矩形自动计算padding</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="mask-info-section" style="display: none;">
+                        <label>掩码信息</label>
+                        <div style="background: #f5f5f5; padding: 10px; border-radius: 4px;">
+                            <p style="margin: 5px 0;"><strong>外接矩形:</strong> <span id="bbox-info">-</span></p>
+                            <p style="margin: 5px 0;"><strong>模型输入尺寸:</strong> <span id="model-size-info">512 x 512</span></p>
+                        </div>
+                    </div>
+
+                    <button id="generate-btn" class="btn btn-primary" onclick="generateDefects()" disabled>生成缺陷</button>
+                    <div id="generate-status" class="status-message"></div>
+                </div>
+
+                <div class="results-section">
+                    <h2>生成结果</h2>
+                    <div class="image-viewer-container">
+                        <div class="image-viewer-controls">
+                            <button id="prev-btn" class="btn btn-secondary" onclick="previousImage()" disabled>← 上一张</button>
+                            <span id="image-counter" class="image-counter">0 / 0</span>
+                            <button id="next-btn" class="btn btn-secondary" onclick="nextImage()" disabled>下一张 →</button>
+                        </div>
+                        <div class="image-viewer">
+                            <div id="image-viewer-placeholder" class="image-viewer-placeholder">
+                                <p>生成图片后将在此显示</p>
+                            </div>
+                            <div id="image-viewer-content" class="image-viewer-content hidden">
+                                <img id="viewer-image" src="" alt="生成结果">
+                                <div id="mask-overlay" class="mask-overlay hidden"></div>
+                            </div>
+                        </div>
+                        <div class="image-viewer-actions">
+                            <button id="show-mask-btn" class="btn btn-secondary" onclick="toggleMask()" disabled>
+                                <span id="show-mask-text">显示掩码区域</span>
+                            </button>
+                            <button id="show-crop-btn" class="btn btn-secondary" onclick="toggleCrop()" disabled>
+                                <span id="show-crop-text">显示裁剪区域</span>
+                            </button>
+                            <button id="download-all-btn" class="btn btn-primary" onclick="downloadAllImages()" disabled>下载所有图片</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
+
