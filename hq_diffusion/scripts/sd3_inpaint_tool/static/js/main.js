@@ -271,14 +271,12 @@ function clearCanvas() {
 // 绘制函数 - 画笔（连续线条）
 function drawBrush(x, y, isFirstPoint = false) {
     // 在绘制canvas上显示白色画笔（用于视觉反馈）
-    drawCtx.fillStyle = 'white';
     drawCtx.strokeStyle = 'white';
     drawCtx.lineWidth = brushSize;
     drawCtx.lineCap = 'round'; // 圆形端点，使线条更平滑
     drawCtx.lineJoin = 'round'; // 圆形连接，使线条更平滑
     
     // 同时更新掩码canvas（实际掩码数据）
-    maskCtx.fillStyle = 'white';
     maskCtx.strokeStyle = 'white';
     maskCtx.lineWidth = brushSize;
     maskCtx.lineCap = 'round';
